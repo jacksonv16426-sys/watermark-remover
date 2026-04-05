@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Watermark Remover</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:#0a0a0f;color:#e0e0e0;font-family:'Segoe UI',system-ui,sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;}
+.nav{width:100%;background:rgba(10,10,15,.95);border-bottom:1px solid #1a1a2e;padding:14px 24px;text-align:center;}
+.nav h1{font-size:22px;font-weight:800;color:#fff;}
+.nav h1 span{color:#ff6b6b;}
+.main{max-width:900px;width:100%;padding:24px;}
+
+.upload-zone{border:2px dashed #2a2a4e;border-radius:12px;padding:60px 24px;text-align:center;cursor:pointer;transition:all .2s;margin-bottom:20px;}
+.upload-zone:hover,.upload-zone.drag{border-color:#ff6b6b;background:rgba(255,107,107,.04);}
+.upload-zone .icon{font-size:48px;margin-bottom:10px;}
+.upload-zone h3{font-size:18px;color:#ccc;}
+.upload-zone p{font-size:13px;color:#555;margin-top:4px;}
+.upload-zone input{display:none;}
+
+.editor{display:none;margin-bottom:20px;}
+.preview-row{display:flex;gap:16px;margin-bottom:16px;}
+.preview-box{flex:1;background:#111119;border:1px solid #1a1a2e;border-radius:12px;overflow:hidden;}
+.preview-box .label{padding:8px 12px;font-size:11px;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #1a1a2e;}
+.preview-box video,.preview-box canvas{width:100%;display:block;background:#000;}
+
+.controls{background:#111119;border:1px solid #1a1a2e;border-radius:12px;padding:20px;margin-bottom:16px;}
+.controls h3{font-size:14px;color:#fff;margin-bottom:12px;}
+.control-row{display:flex;align-items:center;gap:12px;margin-bottom:12px;}
+.control-row label{font-size:13px;color:#888;width:140px;flex-shrink:0;}
+.control-row input[type=range]{flex:1;accent-color:#ff6b6b;}
+.control-row .val{font-size:13px;color:#ff6b6b;font-weight:700;width:50px;text-align:right;}
+.control-row select{background:#0a0a0f;border:1px solid #2a2a4e;color:#ccc;padding:6px 10px;border-radius:6px;font-size:13px;}
+
+.guide-box{background:rgba(255,107,107,.05);border:1px solid rgba(255,107,107,.15);border-radius:8px;padding:12px 14px;font-size:12px;color:#ff6b6b;margin-bottom:16px;line-height:1.5;}
+
+.btn{width:100%;padding:14px;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer;border:none;transition:opacity .2s;}
+.btn:hover{opacity:.9;}
+.btn:disabled{opacity:.3;cursor:default;}
+.btn.red{background:linear-gradient(135deg,#ff6b6b,#cc4444);color:#fff;}
+.btn.outline{background:transparent;border:1px solid #2a2a4e;color:#888;margin-top:8px;}
+.btn.outline:hover{color:#fff;}
+.btn.green{background:linear-gradient(135deg,#6bcb77,#4a9d5b);color:#fff;margin-top:8px;}
+
+.progress{display:none;margin-top:12px;}
+.progress-bar{height:6px;background:#1a1a2e;border-radius:3px;overflow:hidden;}
+.progress-fill{height:100%;background:#ff6b6b;width:0%;transition:width .3s;}
+.progress-text{font-size:12px;color:#888;margin-top:6px;text-align:center;}
+
+.status{display:none;padding:10px 14px;border-radius:8px;font-size:12px;margin-top:12px;}
+.status.show{display:block;}
+.status.ok{background:#6bcb7715;color:#6bcb77;border:1px solid #6bcb7730;}
+.status.err{background:#ff6b6b15;color:#ff6b6b;border:1px solid #ff6b6b30;}
+
+@media(max-width:700px){.preview-row{flex-direction:column;}}
+</style>
+</head>
+<body>
+
+<div class="nav"><h1>Watermark <span>Remover</span></h1></div>
+
+<div class="main">
+  <div class="upload-zone" id="upload-zone">
+    <div class="icon">🎬</div>
+    <h3>Drop your video here</h3>
+    <p>MP4, WebM, MOV — any size</p>
+    <input type="file" id="file-input" accept="video/*">
+  </div>
+
+  <div class="editor" id="editor">
+    <div class="preview-row">
+      <div class="preview-box">
+        <div class="label">Original</div>
+        <video id="original-video" controls muted></video>
+      </div>
+      <div class="preview-box">
+        <div class="label">Preview (watermark removed)</div>
+        <canvas id="preview-canvas"></canvas>
+      </div>
+    </div>
+
+    <div class="controls">
+      <h3>Crop Settings</h3>
+      <div class="guide-box">Adjust the crop amount to cover your watermark. The red area in the preview shows what gets removed.</div>
+
+      <div class="control-row">
+        <label>Remove from</label>
+        <select id="crop-position">
+          <option value="bottom">Bottom</option>
+          <option value="top">Top</option>
+          <option value="left">Left</option>
+          <option value="right">Right</option>
+        </select>
+      </div>
+
+      <div class="control-row">
+        <label>Crop amount</label>
+        <input type="range" id="crop-amount" min="1" max="30" value="8">
+        <span class="val" id="crop-val">8%</span>
+      </div>
+
+      <div class="control-row">
+        <label>Fill method</label>
+        <select id="fill-method">
+          <option value="crop">Crop (remove area)</option>
+          <option value="blur">Blur (cover with blur)</option>
+          <option value="black">Black bar</option>
+          <option value="mirror">Mirror edge</option>
+        </select>
+      </div>
+    </div>
+
+    <button class="btn red" id="process-btn" onclick="processVideo()">Remove Watermark & Export</button>
+    <button class="btn outline" onclick="resetEditor()">Choose Different Video</button>
+
+    <div class="progress" id="progress">
+      <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+      <div class="progress-text" id="progress-text">Processing...</div>
+    </div>
+
+    <div id="download-section" style="display:none;margin-top:16px;">
+      <video id="result-video" controls style="width:100%;border-radius:12px;background:#000;"></video>
+      <button class="btn green" onclick="downloadResult()">Download Video</button>
+    </div>
+
+    <div class="status" id="status"></div>
+  </div>
+</div>
+
+<script>
+var originalVideo=document.getElementById('original-video');
+var previewCanvas=document.getElementById('preview-canvas');
+var ctx=previewCanvas.getContext('2d');
+var videoFile=null;
+var resultBlob=null;
+var previewLoop=null;
+
+// Upload
+var zone=document.getElementById('upload-zone');
+var fileInput=document.getElementById('file-input');
+zone.addEventListener('click',function(){fileInput.click();});
+zone.addEventListener('dragover',function(e){e.preventDefault();zone.classList.add('drag');});
+zone.addEventListener('dragleave',function(){zone.classList.remove('drag');});
+zone.addEventListener('drop',function(e){e.preventDefault();zone.classList.remove('drag');if(e.dataTransfer.files.length)loadVideo(e.dataTransfer.files[0]);});
+fileInput.addEventListener('change',function(){if(this.files.length)loadVideo(this.files[0]);});
+
+function loadVideo(file){
+  if(!file.type.startsWith('video/')){setStatus('Please select a video file','err');return;}
+  videoFile=file;
+  var url=URL.createObjectURL(file);
+  originalVideo.src=url;
+  originalVideo.onloadedmetadata=function(){
+    previewCanvas.width=originalVideo.videoWidth;
+    previewCanvas.height=originalVideo.videoHeight;
+    zone.style.display='none';
+    document.getElementById('editor').style.display='block';
+    startPreview();
+  };
+}
+
+// Preview
+var cropAmount=document.getElementById('crop-amount');
+var cropVal=document.getElementById('crop-val');
+var cropPosition=document.getElementById('crop-position');
+var fillMethod=document.getElementById('fill-method');
+
+cropAmount.addEventListener('input',function(){cropVal.textContent=this.value+'%';});
+cropPosition.addEventListener('change',updatePreview);
+fillMethod.addEventListener('change',updatePreview);
+cropAmount.addEventListener('input',updatePreview);
+
+function startPreview(){
+  originalVideo.play();
+  originalVideo.loop=true;
+  function drawPreview(){
+    if(!originalVideo.paused&&!originalVideo.ended){
+      drawProcessedFrame(ctx,originalVideo,previewCanvas.width,previewCanvas.height,true);
+    }
+    previewLoop=requestAnimationFrame(drawPreview);
+  }
+  drawPreview();
+}
+
+function updatePreview(){}
+
+function drawProcessedFrame(ctx,source,w,h,showGuide){
+  var pct=parseInt(cropAmount.value)/100;
+  var pos=cropPosition.value;
+  var fill=fillMethod.value;
+
+  if(fill==='crop'){
+    // Crop: draw only the non-watermark area, stretched to fill
+    var sx=0,sy=0,sw=w,sh=h;
+    var dx=0,dy=0,dw=w,dh=h;
+    if(pos==='bottom'){sy=0;sh=h*(1-pct);}
+    else if(pos==='top'){sy=h*pct;sh=h*(1-pct);}
+    else if(pos==='left'){sx=w*pct;sw=w*(1-pct);}
+    else if(pos==='right'){sx=0;sw=w*(1-pct);}
+    ctx.fillStyle='#000';
+    ctx.fillRect(0,0,w,h);
+    ctx.drawImage(source,sx,sy,sw,sh,0,0,w,h);
+  } else {
+    // Draw full frame first
+    ctx.drawImage(source,0,0,w,h);
+
+    if(fill==='blur'){
+      // Cover watermark area with blurred version
+      var bx=0,by=0,bw=w,bh=h;
+      if(pos==='bottom'){by=h*(1-pct);bh=h*pct;}
+      else if(pos==='top'){by=0;bh=h*pct;}
+      else if(pos==='left'){bx=0;bw=w*pct;}
+      else if(pos==='right'){bx=w*(1-pct);bw=w*pct;}
+      ctx.save();
+      ctx.filter='blur(20px)';
+      ctx.drawImage(source,bx,by,bw,bh,bx,by,bw,bh);
+      ctx.restore();
+    } else if(fill==='black'){
+      ctx.fillStyle='#000';
+      if(pos==='bottom')ctx.fillRect(0,h*(1-pct),w,h*pct);
+      else if(pos==='top')ctx.fillRect(0,0,w,h*pct);
+      else if(pos==='left')ctx.fillRect(0,0,w*pct,h);
+      else if(pos==='right')ctx.fillRect(w*(1-pct),0,w*pct,h);
+    } else if(fill==='mirror'){
+      ctx.save();
+      if(pos==='bottom'){
+        ctx.translate(0,h);ctx.scale(1,-1);
+        ctx.drawImage(source,0,h*(1-2*pct),w,h*pct,0,0,w,h*pct);
+      } else if(pos==='top'){
+        ctx.translate(0,0);ctx.scale(1,-1);
+        ctx.drawImage(source,0,h*pct,w,h*pct,0,-h*pct,w,h*pct);
+      }
+      ctx.restore();
+    }
+  }
+
+  // Show red guide overlay
+  if(showGuide){
+    ctx.fillStyle='rgba(255,80,80,0.25)';
+    if(pos==='bottom')ctx.fillRect(0,h*(1-pct),w,h*pct);
+    else if(pos==='top')ctx.fillRect(0,0,w,h*pct);
+    else if(pos==='left')ctx.fillRect(0,0,w*pct,h);
+    else if(pos==='right')ctx.fillRect(w*(1-pct),0,w*pct,h);
+  }
+}
+
+// Process
+async function processVideo(){
+  if(!videoFile)return;
+  document.getElementById('process-btn').disabled=true;
+  document.getElementById('progress').style.display='block';
+
+  var video=document.createElement('video');
+  video.muted=true;
+  video.src=URL.createObjectURL(videoFile);
+  await new Promise(function(r){video.onloadedmetadata=r;});
+
+  var vw=video.videoWidth;
+  var vh=video.videoHeight;
+  var fill=fillMethod.value;
+  var pos=cropPosition.value;
+  var pct=parseInt(cropAmount.value)/100;
+
+  // Output dimensions
+  var outW=vw,outH=vh;
+  if(fill==='crop'){
+    if(pos==='bottom'||pos==='top')outH=Math.round(vh*(1-pct));
+    if(pos==='left'||pos==='right')outW=Math.round(vw*(1-pct));
+  }
+
+  var outCanvas=document.createElement('canvas');
+  outCanvas.width=outW;outCanvas.height=outH;
+  var outCtx=outCanvas.getContext('2d');
+
+  var stream=outCanvas.captureStream(30);
+
+  // Try to capture audio too
+  try{
+    var audioCtx=new AudioContext();
+    var audioSource=audioCtx.createMediaElementSource(video);
+    var audioDest=audioCtx.createMediaStreamDestination();
+    audioSource.connect(audioDest);
+    audioSource.connect(audioCtx.destination);
+    stream.addTrack(audioDest.stream.getAudioTracks()[0]);
+  }catch(e){}
+
+  var mimeType='video/webm;codecs=vp9';
+  if(!MediaRecorder.isTypeSupported(mimeType))mimeType='video/webm';
+  var recorder=new MediaRecorder(stream,{mimeType:mimeType,videoBitsPerSecond:8000000});
+  var chunks=[];
+  recorder.ondataavailable=function(e){if(e.data.size>0)chunks.push(e.data);};
+
+  recorder.onstop=function(){
+    resultBlob=new Blob(chunks,{type:'video/webm'});
+    var url=URL.createObjectURL(resultBlob);
+    document.getElementById('result-video').src=url;
+    document.getElementById('download-section').style.display='block';
+    document.getElementById('process-btn').disabled=false;
+    document.getElementById('progress').style.display='none';
+    setStatus('Done! Watch the preview and download.','ok');
+  };
+
+  recorder.start(100);
+  video.currentTime=0;
+  await video.play();
+
+  var duration=video.duration;
+  function renderFrame(){
+    if(video.ended||video.paused){
+      setTimeout(function(){recorder.stop();},200);
+      return;
+    }
+    var progress=video.currentTime/duration;
+    document.getElementById('progress-fill').style.width=Math.round(progress*100)+'%';
+    document.getElementById('progress-text').textContent='Processing: '+Math.round(progress*100)+'%';
+
+    if(fill==='crop'){
+      var sx=0,sy=0,sw=vw,sh=vh;
+      if(pos==='bottom'){sh=vh*(1-pct);}
+      else if(pos==='top'){sy=vh*pct;sh=vh*(1-pct);}
+      else if(pos==='left'){sx=vw*pct;sw=vw*(1-pct);}
+      else if(pos==='right'){sw=vw*(1-pct);}
+      outCtx.drawImage(video,sx,sy,sw,sh,0,0,outW,outH);
+    } else {
+      drawProcessedFrame(outCtx,video,outW,outH,false);
+    }
+    requestAnimationFrame(renderFrame);
+  }
+  renderFrame();
+}
+
+function downloadResult(){
+  if(!resultBlob)return;
+  var a=document.createElement('a');
+  a.href=URL.createObjectURL(resultBlob);
+  a.download='no-watermark.webm';
+  a.click();
+}
+
+function resetEditor(){
+  if(previewLoop)cancelAnimationFrame(previewLoop);
+  originalVideo.pause();
+  document.getElementById('editor').style.display='none';
+  document.getElementById('upload-zone').style.display='block';
+  document.getElementById('download-section').style.display='none';
+  videoFile=null;resultBlob=null;
+}
+
+function setStatus(msg,type){
+  var el=document.getElementById('status');
+  el.textContent=msg;el.className='status show '+type;
+  if(type==='ok')setTimeout(function(){el.className='status';},5000);
+}
+</script>
+</body>
+</html>
